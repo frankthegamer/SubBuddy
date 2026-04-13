@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SubBuddy — Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/shared.css">
+  <style>
+    .sub-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1rem 1.25rem;
+      display: flex; align-items: center; gap: 1rem;
+      transition: border-color .15s, box-shadow .15s; cursor: pointer;
+      text-decoration: none; color: inherit;
+    }
+    .sub-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow); }
+    .sub-icon { width: 38px; height: 38px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 17px; flex-shrink: 0; }
+    .sub-name { font-weight: 500; font-size: 14px; }
+    .sub-cat  { font-size: 12px; color: var(--text-3); }
+    .sub-cost { font-family: 'DM Mono', monospace; font-size: 14px; font-weight: 500; text-align: right; }
+    .sub-freq { font-size: 12px; color: var(--text-3); text-align: right; }
+    .subs-list { display: flex; flex-direction: column; gap: 8px; }
+    .two-col   { display: grid; grid-template-columns: 1fr 320px; gap: 1.25rem; align-items: start; }
+    .sidebar   { display: flex; flex-direction: column; gap: 1rem; }
+    .filter-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+    .chip {
+      font-size: 13px; padding: 4px 12px; border-radius: 20px;
+      border: 1px solid var(--border-strong); background: var(--surface);
+      cursor: pointer; font-family: inherit; color: var(--text-2); transition: all .15s;
+    }
+    .chip.active { background: var(--accent-light); color: var(--accent); border-color: #b0d9c3; }
+    .chip:hover  { border-color: var(--accent-2); }
+    .list-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+    .section-title { font-size: 15px; font-weight: 500; }
+    @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <a class="nav-logo" href="login.html">
+      <div class="nav-logo-icon">
+        <svg viewBox="0 0 20 20" fill="white" width="14" height="14"><path d="M10 2C7.24 2 5 4.24 5 7c0 1.93 1.04 3.62 2.6 4.53L7 18h6l-.6-6.47A5 5 0 0 0 10 2zm0 7a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"/></svg>
+      </div>
+      SubBuddy
+    </a>
+    <div class="nav-links">
+      <a href="dashboard.html"     class="nav-link active">Dashboard</a>
+      <a href="family.html"        class="nav-link">Family</a>
+      <a href="admin.html"         class="nav-link">Admin</a>
+    </div>
+    <div style="position:relative">
+  <div class="avatar" style="cursor:pointer" onclick="toggleProfileMenu()">JS</div>
+  <div id="profile-menu" style="
+    display:none; position:absolute; right:0; top:calc(100% + 8px);
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); box-shadow:var(--shadow-md);
+    min-width:140px; overflow:hidden; z-index:100;
+  ">
+    <button onclick="window.location.href='/'" style="
+      width:100%; padding:10px 16px; text-align:left;
+      background:none; border:none; font-family:inherit;
+      font-size:14px; color:var(--text); cursor:pointer;
+    " onmouseover="this.style.background='var(--surface-2)'" 
+      onmouseout="this.style.background='none'">
+      Sign out
+    </button>
+  </div>
+</div>
+  </nav>
+
+  <main class="container">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Hello, {NAME}</div>
+        <div class="page-subtitle">Here's an overview of your subscriptions</div>
+      </div>
+
+      <div style="position:relative;display:inline-block">
+        <button class="btn btn-secondary" onclick="document.getElementById('month-picker').showPicker()">
+          📅 Viewing statement for <span id="month-label"></span>
+        </button>
+        <input type="month" id="month-picker" style="position:absolute;opacity:0;width:0;height:0;" onchange="onMonthPicked(this.value)">
+      </div>
+
+
+
+      <button class="btn btn-primary" onclick="document.getElementById('modal-add').classList.add('open')">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+        Add subscription
+      </button>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Monthly total</div>
+        <div class="stat-value">-</div>
+        <div class="stat-sub">-</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">Annual estimate</div>
+        <div class="stat-value">-</div>
+        <div class="stat-sub">-</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">Active</div>
+        <div class="stat-value">-</div>
+        <div class="stat-sub">-</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">Next renewal</div>
+        <div class="stat-value" style="font-size:18px;padding-top:4px">Apr 2</div>
+        <div class="stat-sub">Netflix · $15.99</div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div>
+        <div class="list-header">
+          <div class="section-title">Subscriptions</div>
+          <div class="filter-chips">
+            <button class="chip active" onclick="setFilter(this,'All')">All</button>
+            <button class="chip" onclick="setFilter(this,'Active')">Active</button>
+            <button class="chip" onclick="setFilter(this,'Paused')">Paused</button>
+          </div>
+        </div>
+        <div class="subs-list" id="subs-list"></div>
+      </div>
+
+      <div class="sidebar">
+        <div class="card">
+          <div class="section-title" style="margin-bottom:1rem">Spending by category</div>
+          <div id="cat-chart"></div>
+        </div>
+        <div class="card">
+          <div class="section-title" style="margin-bottom:1rem">Recent activity</div>
+          <div id="activity"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Quick-add modal -->
+  <div class="modal-overlay" id="modal-add">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">Add subscription</div>
+
+        <button class="modal-close" onclick="document.getElementById('modal-add').classList.remove('open')">×</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Name <span class="required">*</span></label>
+        <input type="text" id="modal-sub-name" class="form-input" placeholder="e.g. Netflix">
+      </div>
+
+      <div class="form-row cols-2">
+        <div class="form-group">
+          <label class="form-label">Category</label>
+          
+          <select id="modal-sub-cat" class="form-select">
+            <option>Entertainment</option>
+            <option>Music</option>
+            <option>Health &amp; Fitness</option>
+            <option>Education</option>
+            <option>Software &amp; Tools</option>
+            <option>Cloud Storage</option>
+            <option>Gaming</option>
+            <option>News &amp; Media</option>
+          </select>
+  
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          
+          <select id="modal-sub-status" class="form-select">
+            <option>Active</option>
+            <option>Paused</option>
+            <option>Cancelled</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Start date <span class="required">*</span></label>
+        
+        <input type="date" id="modal-sub-date" class="form-input">
+        
+
+      </div>
+      <div class="divider"></div>
+      <div class="section-label">Billing details</div>
+      <div class="form-row cols-2">
+        <div class="form-group">
+          <label class="form-label">Cost <span class="required">*</span></label>
+          
+        <div class="input-prefix-wrap"><span class="input-prefix">$</span>
+            <input type="number" id="modal-sub-cost" class="form-input" placeholder="0.00" step="0.01"></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Frequency</label>
+          <select id="modal-sub-freq" class="form-select">
+            <option>Monthly</option>
+            <option>Annually</option>
+            <option>Weekly</option>
+            <option>Quarterly</option>
+          </select>  
+        </div>
+
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="document.getElementById('modal-add').classList.remove('open')">Cancel</button>
+        <button class="btn btn-primary" onclick="addSubscription()">Save</button> 
+      </div>
+    </div>
+  </div>
+
+<!-- Edit subscription modal -->
+<div class="modal-overlay" id="modal-edit">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Edit subscription</div>
+      <button class="modal-close" onclick="document.getElementById('modal-edit').classList.remove('open')">×</button>
+    </div>
+    <input type="hidden" id="edit-sub-id">
+    <div class="form-group">
+      <label class="form-label">Name <span class="required">*</span></label>
+      <input type="text" id="edit-sub-name" class="form-input">
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        <select id="edit-sub-cat" class="form-select">
+          <option value="">Uncategorized</option>
+          <option>Entertainment</option>
+          <option>Music</option>
+          <option>Health &amp; Fitness</option>
+          <option>Education</option>
+          <option>Software &amp; Tools</option>
+          <option>Cloud Storage</option>
+          <option>Gaming</option>
+          <option>News &amp; Media</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Status</label>
+        <select id="edit-sub-status" class="form-select">
+          <option>Active</option>
+          <option>Paused</option>
+          <option>Cancelled</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Start date <span class="required">*</span></label>
+      <input type="date" id="edit-sub-date" class="form-input">
+    </div>
+    <div class="divider"></div>
+    <div class="section-label">Billing details</div>
+    <div class="form-row cols-2">
+      <div class="form-group">
+        <label class="form-label">Cost <span class="required">*</span></label>
+        <div class="input-prefix-wrap">
+          <span class="input-prefix">$</span>
+          <input type="number" id="edit-sub-cost" class="form-input" placeholder="0.00" step="0.01">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Frequency</label>
+        <select id="edit-sub-freq" class="form-select">
+          <option>Monthly</option>
+          <option>Annually</option>
+          <option>Weekly</option>
+          <option>Quarterly</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="document.getElementById('modal-edit').classList.remove('open')">Cancel</button>
+      <button class="btn btn-primary" onclick="updateSubscription()">Save changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sign out modal -->
+<div class="modal-overlay" id="modal-signout">
+  <div class="modal" style="max-width:340px;text-align:center">
+    <div class="modal-header">
+      <div class="modal-title">Sign out</div>
+      <button class="modal-close" onclick="document.getElementById('modal-signout').classList.remove('open')">×</button>
+    </div>
+    <p style="color:var(--text-2);font-size:14px;margin-bottom:1.5rem">Are you sure you want to sign out?</p>
+    <div class="modal-actions" style="justify-content:center">
+      <button class="btn btn-secondary" onclick="document.getElementById('modal-signout').classList.remove('open')">Cancel</button>
+      <button class="btn btn-primary" onclick="window.location.href='/'">Sign out</button>
+    </div>
+  </div>
+</div>
+
+
+
+
+
+
+
+
+  <script>
+    const SUBS = {{ subscriptions | tojson}};
+    const USER = {{ user | tojson}};
+  </script>
+  <script src="/static/js/dashboard.js"></script>
+  
+</body>
+</html>
