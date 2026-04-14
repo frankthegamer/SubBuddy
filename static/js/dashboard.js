@@ -222,7 +222,11 @@ function renderStats() {
   const uniqueActive = [...new Set(active.map(s => s.SUB_ID))].length;
   const uniquePaused = [...new Set(filtered.filter(s => s.SUBPAY_Status === 'Paused').map(s => s.SUB_ID))].length;
   const monthlyTotal = active.reduce((sum, s) => sum + parseFloat(s.SUBPAY_Cost), 0);
-  const annualEstimate = monthlyTotal * 12;
+
+  // annual estimate
+  const annualEstimate = SUBS
+  .filter(s => s.SUBPAY_Status === 'Active')
+  .reduce((sum, s) => sum + parseFloat(s.SUBPAY_Cost), 0);
 
   document.querySelector('.stats-grid').innerHTML = `
     <div class="stat-card">
