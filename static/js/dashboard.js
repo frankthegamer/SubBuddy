@@ -143,7 +143,7 @@ function renderList() {
   const filtered = getFilteredSubs();
   const list = filtered.filter(s => activeFilter === 'All' || s.SUBPAY_Status === activeFilter);
   document.getElementById('subs-list').innerHTML = list.length ? list.map(s => `
-    <div class="sub-card" onclick="openPaymentModal(${s.SUBPAY_ID}, ${s.SUBPAY_Cost})">
+    <div class="sub-card" onclick="openEditModal(${s.SUB_ID})">
       <div class="sub-icon">${getIcon(s.SUB_CAT)}</div>
       <div style="flex:1">
         <div class="sub-name">${s.SUB_Name}</div>
@@ -155,14 +155,14 @@ function renderList() {
         <div class="sub-freq">${s.SUBPAY_Date}</div>
       </div>
       <div style="display:flex;gap:4px;margin-left:8px" onclick="event.stopPropagation()">
-        <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px" onclick="openEditModal(${s.SUB_ID})">✏️</button>
+        <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px" onclick="openPaymentModal(${s.SUBPAY_ID}, ${s.SUBPAY_Cost})">$</button>
         ${s.SUBPAY_Status === 'Active' ? `
           <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px" onclick="pauseSubscription(${s.SUB_ID}, '${s.SUBPAY_Date}')">⏸️</button>
         ` : s.SUBPAY_Status === 'Paused' ? `
           <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px" onclick="resumeSubscription(${s.SUB_ID}, '${s.SUBPAY_Date}')">▶️</button>
         ` : ''}
         ${s.SUBPAY_Status !== 'Cancelled' ? `
-          <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;color:var(--red)" onclick="cancelSubscription(${s.SUB_ID}, '${s.SUBPAY_Date}')">🗑️</button>
+          <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px;color:var(--red)" onclick="cancelSubscription(${s.SUB_ID}, '${s.SUBPAY_Date}')">X</button>
         ` : ''}
       </div>
     </div>
