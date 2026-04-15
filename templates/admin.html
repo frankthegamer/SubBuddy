@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SubBuddy — Admin</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/shared.css">
+  <style>
+    .user-result {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1rem 1.25rem;
+      display: flex; align-items: center; gap: 1rem; margin-bottom: 8px; cursor: pointer;
+      transition: border-color .15s;
+    }
+    .user-result:hover { border-color: var(--border-strong); }
+    .user-avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--accent-light); color: var(--accent);
+      font-size: 13px; font-weight: 500;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 1.5rem; }
+    .tab-btn {
+      padding: 10px 20px; font-size: 14px; font-family: inherit;
+      background: none; border: none; border-bottom: 2px solid transparent;
+      cursor: pointer; color: var(--text-2); margin-bottom: -1px;
+    }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 500; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+  </style>
+</head>
+
+<body data-user-id="{{ user.USER_ID }}">
+  <nav>
+    <a class="nav-logo" href="/">
+      <div class="nav-logo-icon">
+        <svg viewBox="0 0 20 20" fill="white" width="14" height="14"><path d="M10 2C7.24 2 5 4.24 5 7c0 1.93 1.04 3.62 2.6 4.53L7 18h6l-.6-6.47A5 5 0 0 0 10 2zm0 7a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"/></svg>
+      </div>
+      SubBuddy
+    </a>
+    <div class="nav-links">
+      <a href="/{{ user.USER_ID }}/dashboard" class="nav-link">Dashboard</a>
+      <a href="/{{ user.USER_ID }}/admin" class="nav-link active">Admin</a>
+    </div>
+    <div style="position:relative">
+    </div>
+  </nav>
+
+  <main class="container">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Admin Panel</div>
+        <div class="page-subtitle">Manage users, subscriptions, and families</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab(this, 'tab-users')">Users</button>
+      <button class="tab-btn" onclick="switchTab(this, 'tab-families')">Families</button>
+    </div>
+
+    <!-- USERS TAB -->
+    <div id="tab-users" class="tab-panel active">
+      <div style="display:flex;gap:8px;margin-bottom:1.25rem">
+        <input type="text" id="search-input" class="form-input" placeholder="Search by name or email…" style="max-width:380px">
+        <button class="btn btn-primary" onclick="searchUsers()">Search</button>
+      </div>
+      <div id="search-results"></div>
+
+      <!-- Selected user detail -->
+      <div id="user-detail" style="display:none;margin-top:1.5rem">
+        <div class="card" style="margin-bottom:1rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+            <div class="section-title" id="detail-name"></div>
+
+            <!-- AFTER -->
+            <div style="display:flex;gap:8px">
+                <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px"
+                    onclick="viewSubscriptions()">Visit dashboard</button>
+                <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px"
+                    onclick="document.getElementById('modal-edit-user').classList.add('open')">Edit account</button>
+                <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px;color:var(--red)"
+                    onclick="deleteUser()">Delete account</button>
+            </div>
+
+          </div>
+          <div style="font-size:13px;color:var(--text-3)" id="detail-email"></div>
+        </div>
+
+        
+    
+      </div>
+    </div>
+
+    <!-- FAMILIES TAB -->
+    <div id="tab-families" class="tab-panel">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:1rem">
+        <button class="btn btn-primary" onclick="document.getElementById('modal-create-family').classList.add('open')">
+          + Create family
+        </button>
+      </div>
+
+      {% if families %}
+        {% for f in families %}
+          <div class="card" style="margin-bottom:1rem">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div>
+                <div style="font-weight:500;font-size:15px">{{ f.FAM_Name }}</div>
+                <div style="font-size:13px;color:var(--text-3);margin-top:2px">
+                  Manager: {{ f.USER_FName }} {{ f.USER_LName }}
+                  {% if f.FAM_SLimit %} · Limit: ${{ "%.2f"|format(f.FAM_SLimit) }}{% endif %}
+                </div>
+              </div>
+              <div style="display:flex;gap:8px">
+                <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px"
+                  onclick="openReassignModal({{ f.FAM_ID }})">Reassign manager</button>
+                <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px;color:var(--red)"
+                  onclick='dissolveFamily({{ f.FAM_ID }}, {{ f.FAM_Name | tojson }})'>Dissolve</button>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <div style="color:var(--text-3);font-size:14px;padding:1rem 0">No families yet.</div>
+      {% endif %}
+    </div>
+  </main>
+
+  <!-- Edit user modal -->
+  <div class="modal-overlay" id="modal-edit-user">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-header">
+        <div class="modal-title">Edit account</div>
+        <button class="modal-close" onclick="document.getElementById('modal-edit-user').classList.remove('open')">×</button>
+      </div>
+      <form method="post" action="/admin/update-user">
+        <input type="hidden" name="user_id" id="edit-user-id">
+        <div class="form-row cols-2">
+          <div class="form-group">
+            <label class="form-label">First name</label>
+            <input type="text" name="user_fname" id="edit-user-fname" class="form-input" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Last name</label>
+            <input type="text" name="user_lname" id="edit-user-lname" class="form-input" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" name="user_email" id="edit-user-email" class="form-input" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phone</label>
+          <input type="text" name="user_phone" id="edit-user-phone" class="form-input">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-edit-user').classList.remove('open')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- Create family modal -->
+  <div class="modal-overlay" id="modal-create-family">
+    <div class="modal" style="max-width:380px">
+      <div class="modal-header">
+        <div class="modal-title">Create family</div>
+        <button class="modal-close" onclick="document.getElementById('modal-create-family').classList.remove('open')">×</button>
+      </div>
+
+      <form method="post" action="/admin/create-family">
+        <input type="hidden" name="user_id" value="{{ user.USER_ID }}">
+        <div class="form-group">
+          <label class="form-label">Family name <span class="required">*</span></label>
+
+          <input type="text" name="fam_name" class="form-input" placeholder="e.g. The Smiths" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Manager email <span class="required">*</span></label>
+          <input type="email" name="manager_email" class="form-input" placeholder="Enter email" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Spending limit (optional)</label>
+          <div class="input-prefix-wrap">
+            <span class="input-prefix">$</span>
+            <input type="number" name="fam_slimit" class="form-input" placeholder="0.00" step="0.01">
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-create-family').classList.remove('open')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Reassign manager modal -->
+  <div class="modal-overlay" id="modal-reassign">
+    <div class="modal" style="max-width:340px">
+      <div class="modal-header">
+        <div class="modal-title">Reassign manager</div>
+        <button class="modal-close" onclick="document.getElementById('modal-reassign').classList.remove('open')">×</button>
+      </div>
+      
+      <form method="post" action="/admin/reassign-family-manager">
+        <input type="hidden" name="user_id" value="{{ user.USER_ID }}">
+        <input type="hidden" name="fam_id" id="reassign-fam-id">
+        
+        <div class="form-group">
+          <label class="form-label">New manager email <span class="required">*</span></label>
+          <input type="email" name="manager_email" class="form-input" placeholder="Enter email" required>
+          
+        </div>
+
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-reassign').classList.remove('open')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Reassign</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/js/admin.js"></script>
+</body>
+</html>

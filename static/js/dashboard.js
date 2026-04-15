@@ -299,12 +299,6 @@ async function addSubscription() {
   }
 }
 
-// Toggles the profile dropdown menu visibility
-function toggleProfileMenu() {
-  const menu = document.getElementById('profile-menu');
-  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
-}
-
 // Opens the payment edit modal pre-filled with the payment's current cost
 function openPaymentModal(subpay_id, cost) {
   document.getElementById('edit-subpay-id').value = subpay_id;
@@ -327,15 +321,6 @@ async function updatePayment() {
   }
 }
 
-// Close profile menu when clicking outside of it
-document.addEventListener('click', e => {
-  const menu = document.getElementById('profile-menu');
-  const avatar = document.querySelector('.avatar');
-  if (!menu.contains(e.target) && !avatar.contains(e.target)) {
-    menu.style.display = 'none';
-  }
-});
-
 // Close modals when clicking on the overlay background
 document.getElementById('modal-add').addEventListener('click', e => {
   if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
@@ -350,6 +335,8 @@ document.getElementById('modal-payment').addEventListener('click', e => {
 // Set greeting and avatar initials from logged-in user data
 document.querySelector('.page-title').textContent = `Good morning, ${USER.USER_FName}`;
 document.querySelector('.avatar').textContent = USER.USER_FName[0] + USER.USER_LName[0];
+
+
 
 // Initialize dashboard on page load
 updateMonthView();

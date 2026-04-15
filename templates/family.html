@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SubBuddy — Family</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/shared.css">
+  <style>
+    .member-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1rem 1.25rem;
+      display: flex; align-items: center; gap: 1rem;
+    }
+    .member-avatar {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--accent-light); color: var(--accent);
+      font-size: 13px; font-weight: 500;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .sub-row {
+      display: flex; align-items: center; gap: 1rem;
+      padding: 0.6rem 1rem; border-top: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .not-manager {
+      text-align: center; padding: 4rem 2rem;
+      color: var(--text-3); font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a class="nav-logo" href="/">
+      <div class="nav-logo-icon">
+        <svg viewBox="0 0 20 20" fill="white" width="14" height="14"><path d="M10 2C7.24 2 5 4.24 5 7c0 1.93 1.04 3.62 2.6 4.53L7 18h6l-.6-6.47A5 5 0 0 0 10 2zm0 7a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"/></svg>
+      </div>
+      SubBuddy
+    </a>
+    <div class="nav-links">
+      <a href="/{{ user.USER_ID }}/dashboard" class="nav-link">Dashboard</a>
+      <a href="/{{ user.USER_ID }}/family" class="nav-link active">Family</a>
+      <a href="/{{ user.USER_ID }}/admin" class="nav-link">Admin</a>
+    </div>
+    <div style="position:relative">
+    </div>
+  </nav>
+
+  <main class="container">
+
+    {% if not family %}
+    <!-- Not a family manager -->
+    <div class="not-manager">
+      <div style="font-size:2rem;margin-bottom:1rem">🏠</div>
+      <div style="font-size:16px;font-weight:500;margin-bottom:0.5rem">You're not a Family Manager</div>
+      <div>Only Family Managers can access this page.</div>
+    </div>
+
+    {% else %}
+    <!-- Family Manager view -->
+    <div class="page-header">
+      <div>
+        <div class="page-title">{{ family.FAM_Name }}</div>
+        <div class="page-subtitle">Family Manager dashboard</div>
+      </div>
+      <button class="btn btn-primary" onclick="document.getElementById('modal-invite').classList.add('open')">
+        + Add member
+      </button>
+    </div>
+
+    <!-- Spending limit card -->
+    <div class="card" style="margin-bottom:1.25rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+        <div class="section-title">Spending limit</div>
+        <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px"
+          onclick="document.getElementById('modal-limit').classList.add('open')">Edit limit</button>
+      </div>
+      {% if family.FAM_SLimit %}
+        {% set total = namespace(val=0) %}
+        {% for s in family_subs %}
+          {% if s.SUBPAY_Status == 'Active' %}
+            {% set total.val = total.val + s.SUBPAY_Cost %}
+          {% endif %}
+        {% endfor %}
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
+          <span style="color:var(--text-2)">Monthly spend</span>
+          <span style="font-family:'DM Mono',monospace">${{ "%.2f"|format(total.val) }} / ${{ "%.2f"|format(family.FAM_SLimit) }}</span>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-bar" style="width:{{ [[(total.val / family.FAM_SLimit * 100)|round, 0]|max, 100]|min }}%"></div>
+        </div>
+      {% else %}
+        <div style="color:var(--text-3);font-size:13px">No spending limit set.</div>
+      {% endif %}
+    </div>
+
+    <!-- Members + their subscriptions -->
+    <div class="section-title" style="margin-bottom:1rem">Members</div>
+
+    {% if not members %}
+      <div style="color:var(--text-3);font-size:14px;padding:1rem 0">No members yet.</div>
+    {% else %}
+      {% for member in members %}
+        <div style="margin-bottom:1rem">
+          <div class="member-card">
+            <div class="member-avatar">{{ member.USER_FName[0] }}{{ member.USER_LName[0] }}</div>
+            <div style="flex:1">
+              <div style="font-weight:500;font-size:14px">{{ member.USER_FName }} {{ member.USER_LName }}</div>
+              <div style="font-size:12px;color:var(--text-3)">{{ member.USER_Email }}</div>
+            </div>
+            <form method="post" action="/remove-user" style="margin:0">
+              <input type="hidden" name="fam_id" value="{{ family.FAM_ID }}">
+              <input type="hidden" name="user_id" value="{{ member.USER_ID }}">
+              <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px;color:var(--red)"
+                onclick="return confirm('Remove {{ member.USER_FName }} from the family?')">Remove</button>
+            </form>
+          </div>
+
+          <!-- That member's subscriptions -->
+          {% set member_subs = family_subs | selectattr('USER_ID', 'equalto', member.USER_ID) | list %}
+          {% if member_subs %}
+            <div style="border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius) var(--radius);margin-top:-1px">
+              {% for s in member_subs %}
+                <div class="sub-row">
+                  <span style="flex:1;font-weight:500">{{ s.SUB_Name }}</span>
+                  <span style="color:var(--text-3)">{{ s.SUB_CAT or 'Uncategorized' }}</span>
+                  <span class="badge {{ 'badge-green' if s.SUBPAY_Status == 'Active' else 'badge-yellow' if s.SUBPAY_Status == 'Paused' else 'badge-red' }}">{{ s.SUBPAY_Status }}</span>
+                  <span style="font-family:'DM Mono',monospace">${{ "%.2f"|format(s.SUBPAY_Cost) }}</span>
+                  <span style="color:var(--text-3)">{{ s.SUBPAY_Date }}</span>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div style="border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius) var(--radius);padding:0.75rem 1rem;font-size:13px;color:var(--text-3);margin-top:-1px">
+              No subscriptions.
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    {% endif %}
+    {% endif %}
+  </main>
+
+  <!-- Invite member modal -->
+  <div class="modal-overlay" id="modal-invite">
+    <div class="modal" style="max-width:360px">
+      <div class="modal-header">
+        <div class="modal-title">Add member</div>
+        <button class="modal-close" onclick="document.getElementById('modal-invite').classList.remove('open')">×</button>
+      </div>
+      <form method="post" action="/invite-user">
+        <input type="hidden" name="fam_id" value="{{ family.FAM_ID if family }}">
+
+        <div class="form-group">
+            <label class="form-label">Manager email <span class="required">*</span></label>
+            <input type="email" name="manager_email" class="form-input" placeholder="Enter email" required>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-invite').classList.remove('open')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit spending limit modal -->
+  <div class="modal-overlay" id="modal-limit">
+    <div class="modal" style="max-width:320px">
+      <div class="modal-header">
+        <div class="modal-title">Set spending limit</div>
+        <button class="modal-close" onclick="document.getElementById('modal-limit').classList.remove('open')">×</button>
+      </div>
+      <form method="post" action="/assign-spend-limit">
+        <input type="hidden" name="fam_id" value="{{ family.FAM_ID if family }}">
+        <div class="form-group">
+          <label class="form-label">Monthly limit <span class="required">*</span></label>
+          <div class="input-prefix-wrap">
+            <span class="input-prefix">$</span>
+            <input type="number" name="fam_slimit" class="form-input" placeholder="0.00" step="0.01"
+              value="{{ family.FAM_SLimit if family and family.FAM_SLimit }}">
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-limit').classList.remove('open')">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+  </script>
+</body>
+</html>
