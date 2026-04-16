@@ -41,6 +41,20 @@ def init_db():
             print(f"Table '{name}' verified.")
 
         
+        # Seed initial system admin user
+        cursor.execute("SELECT USER_ID FROM USERS WHERE USER_Email = 'admin@subbuddy.com'")
+        if not cursor.fetchone():
+            cursor.execute("""
+                INSERT INTO USERS (USER_FName, USER_LName, USER_Email, USER_Password)
+                VALUES ('Admin', 'User', 'admin@subbuddy.com', 'admin123')
+            """)
+            admin_id = cursor.lastrowid
+            cursor.execute("INSERT INTO SYSTEM_ADMINS (USER_ID) VALUES (%s)", (admin_id,))
+            print("Admin user seeded.")
+        else:
+            print("Admin user already exists, skipping.")
+
+        
         conn.commit()
         print("--- Database Setup Complete ---")
     except Exception as e:

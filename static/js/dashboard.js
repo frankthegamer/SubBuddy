@@ -332,9 +332,8 @@ document.getElementById('modal-payment').addEventListener('click', e => {
   if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
 });
 
-// Set greeting and avatar initials from logged-in user data
-document.querySelector('.page-title').textContent = `Good morning, ${USER.USER_FName}`;
-document.querySelector('.avatar').textContent = USER.USER_FName[0] + USER.USER_LName[0];
+// Set greeting from logged-in user data
+document.querySelector('.page-title').textContent = `Hello ${USER.USER_FName}`;
 
 
 

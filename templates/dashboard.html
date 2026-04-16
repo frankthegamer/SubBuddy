@@ -278,15 +278,8 @@
   </div>
 </div>
 
-  <script>
-    const SUBS = {{ subscriptions | tojson }};
-    const USER = {{ user | tojson }};
-    const CATS = {{ categories | tojson }};
-  </script>
-  <script src="/static/js/dashboard.js"></script>
 
-
-  <!-- Edit user profile details -->
+<!-- Edit user profile details -->
 
   <div class="modal-overlay" id="modal-edit-user">
   <div class="modal" style="max-width:400px">
@@ -322,5 +315,16 @@
   </div>
 </div>
 
+
+  <script>
+    const SUBS = {{ subscriptions | tojson }};
+    const USER = {{ user | tojson }};
+    const CATS = {{ categories | tojson }};
+  </script>
+  
+
+
+  
+<script src="/static/js/dashboard.js"></script>
 </body>
 </html>
