@@ -224,9 +224,18 @@ function renderStats() {
   const monthlyTotal = active.reduce((sum, s) => sum + parseFloat(s.SUBPAY_Cost), 0);
 
   // annual estimate
+  const seen = new Set();
   const annualEstimate = SUBS
-  .filter(s => s.SUBPAY_Status === 'Active')
-  .reduce((sum, s) => sum + parseFloat(s.SUBPAY_Cost), 0);
+    .filter(s => s.SUBPAY_Status === 'Active' && !seen.has(s.SUB_ID) && seen.add(s.SUB_ID))
+    .reduce((sum, s) => {
+      const cost = parseFloat(s.SUBPAY_Cost);
+      const freq = s.SUBVER_FREQ;
+      if (freq === 'Weekly') return sum + cost * 52;
+      if (freq === 'Monthly') return sum + cost * 12;
+      if (freq === 'Quarterly') return sum + cost * 4;
+      if (freq === 'Annually') return sum + cost;
+      return sum;
+    }, 0);
 
   document.querySelector('.stats-grid').innerHTML = `
     <div class="stat-card">

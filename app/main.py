@@ -36,6 +36,10 @@ db_pool = pooling.MySQLConnectionPool(
 def get_db_conn():
     return db_pool.get_connection()
 
+def is_admin(cursor, user_id: int) -> bool:
+    cursor.execute("SELECT * FROM SYSTEM_ADMINS WHERE USER_ID = %s", (user_id,))
+    return cursor.fetchone() is not None
+
 # Generates 12 months of payment records from start_date
 def generate_payments(cursor, sub_id, start_date, cost, freq):
     if isinstance(start_date, str):
@@ -45,7 +49,7 @@ def generate_payments(cursor, sub_id, start_date, cost, freq):
     current = start_date
     end_date = start_date + relativedelta(months=12)
 
-    while current <= end_date:
+    while current < end_date:
         payments.append((sub_id, cost, current))
         if freq == 'Weekly':
             current += timedelta(weeks=1)
@@ -282,7 +286,6 @@ def cancel_subscription(
     return RedirectResponse(url=f"/{user_id}/dashboard", status_code=303)
 
 
-
 # --- ADD CUSTOM CATEGORY ---
 @app.post("/add-category")
 def add_category(
@@ -323,8 +326,8 @@ def delete_category(cat_id: int = Form(...), user_id: int = Form(...)):
     finally:
         cursor.close()
         conn.close()
-    return RedirectResponse(url=f"/{user_id}/dashboard", status_code=303)\
-    
+    return RedirectResponse(url=f"/{user_id}/dashboard", status_code=303)
+
 
 # --- PAUSE SUBSCRIPTION ---
 @app.post("/pause-subscription")
@@ -366,16 +369,12 @@ def resume_subscription(sub_id: int = Form(...), user_id: int = Form(...), resum
     return RedirectResponse(url=f"/{user_id}/dashboard", status_code=303)
 
 
-
-
-
 # --- FAMILY PAGE ---
 @app.get("/{user_id}/family")
 def family_page(request: Request, user_id: int):
     conn = get_db_conn()
     cursor = conn.cursor(dictionary=True)
     try:
-        # Get the family this user manages
         cursor.execute("""
             SELECT F.* FROM FAMILIES F
             JOIN FAMILY_MANAGERS FM ON F.FAMMAN_ID = FM.FAMMAN_ID
@@ -385,8 +384,8 @@ def family_page(request: Request, user_id: int):
 
         members = []
         family_subs = []
+        monthly_total = 0
         if family:
-            # Get members
             cursor.execute("""
                 SELECT U.USER_ID, U.USER_FName, U.USER_LName, U.USER_Email
                 FROM FAMILY_USERS FU
@@ -395,25 +394,42 @@ def family_page(request: Request, user_id: int):
             """, (family['FAM_ID'],))
             members = cursor.fetchall()
 
-            # Get all subscriptions for the family
             cursor.execute("""
                 SELECT U.USER_ID, U.USER_FName, U.USER_LName,
-                       S.SUB_ID, S.SUB_Name, S.SUB_CAT,
-                       SP.SUBPAY_Cost, SP.SUBPAY_Date, SP.SUBPAY_Status,
-                       SV.SUBVER_FREQ
-                FROM FAMILY_USERS FU
-                JOIN USERS U ON FU.USER_ID = U.USER_ID
-                JOIN SUBSCRIPTIONS S ON U.USER_ID = S.USER_ID
+                    S.SUB_ID, S.SUB_Name, S.SUB_CAT,
+                    SP.SUBPAY_Cost, SP.SUBPAY_Date, SP.SUBPAY_Status,
+                    SV.SUBVER_FREQ
+                FROM SUBSCRIPTIONS S
+                JOIN USERS U ON S.USER_ID = U.USER_ID
                 JOIN SUBSCRIPTION_PAYMENTS SP ON S.SUB_ID = SP.SUB_ID
                 JOIN SUBSCRIPTION_VERSIONS SV ON SV.SUBVER_ID = (
                     SELECT SUBVER_ID FROM SUBSCRIPTION_VERSIONS
                     WHERE SUB_ID = S.SUB_ID
                     ORDER BY SUBVER_DateAdded DESC LIMIT 1
                 )
-                WHERE FU.FAM_ID = %s
+                WHERE S.USER_ID = %s  -- manager
+                OR S.USER_ID IN (
+                    SELECT USER_ID FROM FAMILY_USERS WHERE FAM_ID = %s
+                )
                 ORDER BY U.USER_LName, SP.SUBPAY_Date
-            """, (family['FAM_ID'],))
+            """, (user_id, family['FAM_ID'],))
             family_subs = cursor.fetchall()
+
+            seen_subs = set()
+            for s in family_subs:
+                if s['SUB_ID'] not in seen_subs and s['SUBPAY_Status'] == 'Active':
+                    seen_subs.add(s['SUB_ID'])
+                    freq = s['SUBVER_FREQ']
+                    cost = float(s['SUBPAY_Cost'])
+                    if freq == 'Weekly':
+                        monthly_total += cost * 52 / 12
+                    elif freq == 'Monthly':
+                        monthly_total += cost
+                    elif freq == 'Quarterly':
+                        monthly_total += cost / 3
+                    elif freq == 'Annually':
+                        monthly_total += cost / 12
+            monthly_total = round(monthly_total, 2)
 
         family = json.loads(json.dumps(family, default=serialize)) if family else None
         members = json.loads(json.dumps(members, default=serialize))
@@ -426,7 +442,7 @@ def family_page(request: Request, user_id: int):
         return templates.TemplateResponse(
             request=request,
             name="family.html",
-            context={"user": user, "family": family, "members": members, "family_subs": family_subs}
+            context={"user": user, "family": family, "members": members, "family_subs": family_subs, "monthly_total": monthly_total}
         )
     finally:
         cursor.close()
@@ -439,6 +455,9 @@ def admin_page(request: Request, user_id: int):
     conn = get_db_conn()
     cursor = conn.cursor(dictionary=True)
     try:
+        if not is_admin(cursor, user_id):
+            return RedirectResponse(url=f"/{user_id}/dashboard", status_code=303)
+
         cursor.execute("SELECT * FROM USERS WHERE USER_ID = %s", (user_id,))
         user = cursor.fetchone()
         user = json.loads(json.dumps(user, default=serialize))
@@ -473,7 +492,8 @@ def admin_search_user(request: Request, q: str):
             SELECT * FROM USERS
             WHERE USER_Email LIKE %s
             OR CONCAT(USER_FName, ' ', USER_LName) LIKE %s
-        """, (f"%{q}%", f"%{q}%"))
+            OR USER_Phone LIKE %s
+        """, (f"%{q}%", f"%{q}%", f"%{q}%"))
         results = cursor.fetchall()
         results = json.loads(json.dumps(results, default=serialize))
         return {"users": results}
@@ -493,23 +513,24 @@ def admin_create_family(
     conn = get_db_conn()
     cursor = conn.cursor(dictionary=True)
     try:
+        if not is_admin(cursor, user_id):
+            return {"error": "Unauthorized"}
+
         cursor.execute("SELECT USER_ID FROM USERS WHERE USER_Email = %s", (manager_email,))
         user = cursor.fetchone()
         if not user:
             return {"error": "No user found with that email"}
 
-        user_id = user['USER_ID']
+        manager_user_id = user['USER_ID']
 
-        # Insert into FAMILY_MANAGERS if not already there
-        cursor.execute("SELECT FAMMAN_ID FROM FAMILY_MANAGERS WHERE USER_ID = %s", (user_id,))
+        cursor.execute("SELECT FAMMAN_ID FROM FAMILY_MANAGERS WHERE USER_ID = %s", (manager_user_id,))
         manager = cursor.fetchone()
         if not manager:
-            cursor.execute("INSERT INTO FAMILY_MANAGERS (USER_ID) VALUES (%s)", (user_id,))
+            cursor.execute("INSERT INTO FAMILY_MANAGERS (USER_ID) VALUES (%s)", (manager_user_id,))
             famman_id = cursor.lastrowid
         else:
             famman_id = manager['FAMMAN_ID']
 
-        # Check if this manager already manages a family
         cursor.execute("SELECT FAM_ID FROM FAMILIES WHERE FAMMAN_ID = %s", (famman_id,))
         if cursor.fetchone():
             return {"error": "This user already manages a family"}
@@ -528,7 +549,6 @@ def admin_create_family(
     return RedirectResponse(url=f"/{user_id}/admin", status_code=303)
 
 
-
 # --- ADMIN: REASSIGN FAMILY MANAGER ---
 @app.post("/admin/reassign-family-manager")
 def reassign_family_manager(
@@ -539,23 +559,32 @@ def reassign_family_manager(
     conn = get_db_conn()
     cursor = conn.cursor(dictionary=True)
     try:
+        if not is_admin(cursor, user_id):
+            return {"error": "Unauthorized"}
+
         cursor.execute("SELECT USER_ID FROM USERS WHERE USER_Email = %s", (manager_email,))
         user = cursor.fetchone()
         if not user:
             return {"error": "No user found with that email"}
 
-        user_id = user['USER_ID']
+        manager_user_id = user['USER_ID']
 
-        # Insert into FAMILY_MANAGERS if not already there
-        cursor.execute("SELECT FAMMAN_ID FROM FAMILY_MANAGERS WHERE USER_ID = %s", (user_id,))
+
+        # Check if this user is an admin
+        cursor.execute("SELECT * FROM SYSTEM_ADMINS WHERE USER_ID = %s", (manager_user_id,))
+        if cursor.fetchone():
+            return {"error": "This user is a System Admin and cannot be a Family Manager"}
+
+        cursor.execute("SELECT FAMMAN_ID FROM FAMILY_MANAGERS WHERE USER_ID = %s", (manager_user_id,))
+
+        
         manager = cursor.fetchone()
         if not manager:
-            cursor.execute("INSERT INTO FAMILY_MANAGERS (USER_ID) VALUES (%s)", (user_id,))
+            cursor.execute("INSERT INTO FAMILY_MANAGERS (USER_ID) VALUES (%s)", (manager_user_id,))
             famman_id = cursor.lastrowid
         else:
             famman_id = manager['FAMMAN_ID']
 
-        # Check if this manager already manages a family
         cursor.execute("SELECT FAM_ID FROM FAMILIES WHERE FAMMAN_ID = %s AND FAM_ID != %s", (famman_id, fam_id))
         if cursor.fetchone():
             return {"error": "This user already manages another family"}
@@ -568,45 +597,19 @@ def reassign_family_manager(
     finally:
         cursor.close()
         conn.close()
-    return RedirectResponse(url="/admin", status_code=303)
+    return RedirectResponse(url=f"/{user_id}/admin", status_code=303)
 
 
 
-# --- ADMIN: GET USER SUBSCRIPTIONS ---
-@app.get("/admin/user/{user_id}/subs")
-def admin_get_user_subs(user_id: int):
+# --- ADMIN: DISSOLVE FAMILY ---
+@app.post("/admin/dissolve-family")
+def dissolve_family(fam_id: int = Form(...), user_id: int = Form(...)):
     conn = get_db_conn()
     cursor = conn.cursor(dictionary=True)
     try:
-        cursor.execute("""
-            SELECT S.SUB_ID, S.SUB_Name, S.SUB_CAT,
-                   SP.SUBPAY_ID, SP.SUBPAY_Cost, SP.SUBPAY_Date, SP.SUBPAY_Status,
-                   SV.SUBVER_FREQ
-            FROM SUBSCRIPTIONS S
-            JOIN SUBSCRIPTION_PAYMENTS SP ON S.SUB_ID = SP.SUB_ID
-            JOIN SUBSCRIPTION_VERSIONS SV ON SV.SUBVER_ID = (
-                SELECT SUBVER_ID FROM SUBSCRIPTION_VERSIONS
-                WHERE SUB_ID = S.SUB_ID
-                ORDER BY SUBVER_DateAdded DESC LIMIT 1
-            )
-            WHERE S.USER_ID = %s
-            ORDER BY SP.SUBPAY_Date DESC
-        """, (user_id,))
-        subs = cursor.fetchall()
-        subs = json.loads(json.dumps(subs, default=serialize))
-        return {"subscriptions": subs}
-    finally:
-        cursor.close()
-        conn.close()
+        if not is_admin(cursor, user_id):
+            return {"error": "Unauthorized"}
 
-
-
-# --- ADMIN: Dissolve Family ---
-@app.post("/admin/dissolve-family")
-def dissolve_family(fam_id: int = Form(...)):
-    conn = get_db_conn()
-    cursor = conn.cursor()
-    try:
         cursor.execute("DELETE FROM FAMILY_USERS WHERE FAM_ID = %s", (fam_id,))
         cursor.execute("DELETE FROM FAMILIES WHERE FAM_ID = %s", (fam_id,))
         conn.commit()
@@ -624,17 +627,21 @@ def dissolve_family(fam_id: int = Form(...)):
 @app.post("/admin/update-user")
 def admin_update_user(
     user_id: int = Form(...),
+    target_user_id: int = Form(...),
     user_fname: str = Form(...),
     user_lname: str = Form(...),
     user_email: str = Form(...),
     user_phone: str = Form(None)
 ):
     conn = get_db_conn()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
     try:
+        if not is_admin(cursor, user_id):
+            return {"error": "Unauthorized"}
+
         cursor.execute(
             "UPDATE USERS SET USER_FName = %s, USER_LName = %s, USER_Email = %s, USER_Phone = %s WHERE USER_ID = %s",
-            (user_fname, user_lname, user_email, user_phone, user_id)
+            (user_fname, user_lname, user_email, user_phone, target_user_id)
         )
         conn.commit()
     except Exception as e:
@@ -643,4 +650,86 @@ def admin_update_user(
     finally:
         cursor.close()
         conn.close()
-    return RedirectResponse(url=f"/{user_id}/dashboard", status_code=303)
+    return RedirectResponse(url=f"/{user_id}/admin", status_code=303)
+
+
+# --- ADMIN: DELETE USER ---
+@app.post("/admin/delete-user")
+def admin_delete_user(user_id: int = Form(...), target_user_id: int = Form(...)):
+    conn = get_db_conn()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        if not is_admin(cursor, user_id):
+            return {"error": "Unauthorized"}
+
+        cursor.execute("DELETE FROM USERS WHERE USER_ID = %s", (target_user_id,))
+        conn.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        conn.rollback()
+        print(f"Error: {e}")
+        return {"status": "error"}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# --- ADMIN: DELETE SUBSCRIPTION ---
+@app.post("/admin/delete-subscription")
+def admin_delete_subscription(sub_id: int = Form(...), user_id: int = Form(...)):
+    conn = get_db_conn()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        if not is_admin(cursor, user_id):
+            return {"error": "Unauthorized"}
+
+        cursor.execute("DELETE FROM SUBSCRIPTIONS WHERE SUB_ID = %s", (sub_id,))
+        conn.commit()
+        return {"status": "ok"}
+    except Exception as e:
+        conn.rollback()
+        print(f"Error: {e}")
+        return {"status": "error"}
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# --- FAMILY: ADD MEMBER ---
+@app.post("/add-user")
+def add_user(fam_id: int = Form(...), user_email: str = Form(...)):
+    conn = get_db_conn()
+    cursor = conn.cursor(dictionary=True)
+    manager_id = None
+    try:
+        cursor.execute("SELECT USER_ID FROM USERS WHERE USER_Email = %s", (user_email,))
+        user = cursor.fetchone()
+        if not user:
+            return {"error": "No user found with that email"}
+
+        user_id = user['USER_ID']
+
+        cursor.execute("SELECT * FROM FAMILY_USERS WHERE USER_ID = %s", (user_id,))
+        if cursor.fetchone():
+            return {"error": "User is already in a family"}
+
+        cursor.execute(
+            "INSERT INTO FAMILY_USERS (FAM_ID, USER_ID) VALUES (%s, %s)",
+            (fam_id, user_id)
+        )
+        conn.commit()
+
+        cursor.execute("""
+            SELECT FM.USER_ID FROM FAMILIES F
+            JOIN FAMILY_MANAGERS FM ON F.FAMMAN_ID = FM.FAMMAN_ID
+            WHERE F.FAM_ID = %s
+        """, (fam_id,))
+        manager = cursor.fetchone()
+        manager_id = manager['USER_ID']
+    except Exception as e:
+        conn.rollback()
+        print(f"Error: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+    return RedirectResponse(url=f"/{manager_id}/family", status_code=303)

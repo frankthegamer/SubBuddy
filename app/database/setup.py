@@ -40,7 +40,37 @@ def init_db():
             cursor.execute(ddl)
             print(f"Table '{name}' verified.")
 
-        
+
+        # Triggers — these enforce disjoint specialization (a user can only be an admin OR a family manager, not both)
+        cursor.execute("DROP TRIGGER IF EXISTS before_insert_admin")
+        cursor.execute("""
+            CREATE TRIGGER before_insert_admin
+            BEFORE INSERT ON SYSTEM_ADMINS
+            FOR EACH ROW
+            BEGIN
+                IF EXISTS (SELECT * FROM FAMILY_MANAGERS WHERE USER_ID = NEW.USER_ID) THEN
+                    SIGNAL SQLSTATE '45000'
+                    SET MESSAGE_TEXT = 'User is already a Family Manager';
+                END IF;
+            END
+        """)
+        print("Trigger 'before_insert_admin' verified.")
+
+        cursor.execute("DROP TRIGGER IF EXISTS before_insert_family_manager")
+        cursor.execute("""
+            CREATE TRIGGER before_insert_family_manager
+            BEFORE INSERT ON FAMILY_MANAGERS
+            FOR EACH ROW
+            BEGIN
+                IF EXISTS (SELECT * FROM SYSTEM_ADMINS WHERE USER_ID = NEW.USER_ID) THEN
+                    SIGNAL SQLSTATE '45000'
+                    SET MESSAGE_TEXT = 'User is already a System Admin';
+                END IF;
+            END
+        """)
+        print("Trigger 'before_insert_family_manager' verified.")
+
+
         # Seed initial system admin user
         cursor.execute("SELECT USER_ID FROM USERS WHERE USER_Email = 'admin@subbuddy.com'")
         if not cursor.fetchone():
@@ -54,7 +84,6 @@ def init_db():
         else:
             print("Admin user already exists, skipping.")
 
-        
         conn.commit()
         print("--- Database Setup Complete ---")
     except Exception as e:

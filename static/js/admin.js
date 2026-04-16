@@ -105,10 +105,11 @@ let selectedUser = null;
 
     async function dissolveFamily(fam_id, name) {
         if (!confirm(`Dissolve "${name}"? All members will be removed.`)) return;
+        const userId = document.body.dataset.userId;
         const fd = new FormData();
         fd.append('fam_id', fam_id);
+        fd.append('user_id', userId);
         const res = await fetch('/admin/dissolve-family', { method: 'POST', body: fd });
-        const userId = document.body.dataset.userId;
         window.location.href = `/${userId}/admin`;
     }
 

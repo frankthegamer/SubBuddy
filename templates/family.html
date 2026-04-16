@@ -63,7 +63,7 @@
         <div class="page-title">{{ family.FAM_Name }}</div>
         <div class="page-subtitle">Family Manager dashboard</div>
       </div>
-      <button class="btn btn-primary" onclick="document.getElementById('modal-invite').classList.add('open')">
+      <button class="btn btn-primary" onclick="document.getElementById('modal-add-member').classList.add('open')">
         + Add member
       </button>
     </div>
@@ -76,18 +76,12 @@
           onclick="document.getElementById('modal-limit').classList.add('open')">Edit limit</button>
       </div>
       {% if family.FAM_SLimit %}
-        {% set total = namespace(val=0) %}
-        {% for s in family_subs %}
-          {% if s.SUBPAY_Status == 'Active' %}
-            {% set total.val = total.val + s.SUBPAY_Cost %}
-          {% endif %}
-        {% endfor %}
         <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px">
           <span style="color:var(--text-2)">Monthly spend</span>
-          <span style="font-family:'DM Mono',monospace">${{ "%.2f"|format(total.val) }} / ${{ "%.2f"|format(family.FAM_SLimit) }}</span>
+          <span style="font-family:'DM Mono',monospace">${{ "%.2f"|format(monthly_total) }} / ${{ "%.2f"|format(family.FAM_SLimit) }}</span>
         </div>
         <div class="progress-wrap">
-          <div class="progress-bar" style="width:{{ [[(total.val / family.FAM_SLimit * 100)|round, 0]|max, 100]|min }}%"></div>
+          <div class="progress-bar" style="width:{{ [[(monthly_total / family.FAM_SLimit * 100)|round, 0]|max, 100]|min }}%"></div>
         </div>
       {% else %}
         <div style="color:var(--text-3);font-size:13px">No spending limit set.</div>
@@ -141,23 +135,22 @@
     {% endif %}
   </main>
 
-  <!-- Invite member modal -->
-  <div class="modal-overlay" id="modal-invite">
+  <!-- Add member modal -->
+  <div class="modal-overlay" id="modal-add-member">
     <div class="modal" style="max-width:360px">
       <div class="modal-header">
         <div class="modal-title">Add member</div>
-        <button class="modal-close" onclick="document.getElementById('modal-invite').classList.remove('open')">×</button>
+        <button class="modal-close" onclick="document.getElementById('modal-add-member').classList.remove('open')">×</button>
       </div>
-      <form method="post" action="/invite-user">
+      <form method="post" action="/add-user">
         <input type="hidden" name="fam_id" value="{{ family.FAM_ID if family }}">
-
+        <input type="hidden" name="manager_id" value="{{ user.USER_ID }}">
         <div class="form-group">
-            <label class="form-label">Manager email <span class="required">*</span></label>
-            <input type="email" name="manager_email" class="form-input" placeholder="Enter email" required>
+          <label class="form-label">Member email <span class="required">*</span></label>
+          <input type="email" name="user_email" class="form-input" placeholder="Enter email" required>
         </div>
-
         <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-invite').classList.remove('open')">Cancel</button>
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-add-member').classList.remove('open')">Cancel</button>
           <button type="submit" class="btn btn-primary">Add</button>
         </div>
       </form>
@@ -173,6 +166,7 @@
       </div>
       <form method="post" action="/assign-spend-limit">
         <input type="hidden" name="fam_id" value="{{ family.FAM_ID if family }}">
+        <input type="hidden" name="manager_id" value="{{ user.USER_ID }}">
         <div class="form-group">
           <label class="form-label">Monthly limit <span class="required">*</span></label>
           <div class="input-prefix-wrap">
@@ -189,7 +183,5 @@
     </div>
   </div>
 
-  <script>
-  </script>
 </body>
 </html>
