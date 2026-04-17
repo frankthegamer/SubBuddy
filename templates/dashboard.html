@@ -113,6 +113,11 @@
         <div class="page-title">Hello</div>
         <div class="page-subtitle">Here's an overview of your subscriptions</div>
       </div>
+
+      
+      
+
+      
       <div style="position:relative;display:inline-block">
         <button class="btn btn-secondary" onclick="document.getElementById('month-picker').showPicker()">
           📅 Viewing statement for <span id="month-label"></span>
@@ -124,6 +129,25 @@
         Add subscription
       </button>
     </div>
+
+
+
+    {% if family and not is_manager %}
+      <div style="margin-bottom:1rem;display:flex;align-items:center;gap:1rem">
+        <div style="font-size:14px">You belong to family: <strong>{{ family.FAM_Name }}</strong></div>
+
+        {% if not is_manager %}
+        <form method="post" action="/leave-family" style="margin:0">
+          <input type="hidden" name="user_id" value="{{ user.USER_ID }}">
+          <input type="hidden" name="fam_id" value="{{ family.FAM_ID }}">
+          <input type="hidden" name="next" value="/{{ user.USER_ID }}/dashboard">
+          <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px;color:var(--red)"
+            onclick="return confirm('Leave this family?')">Leave family</button>
+        </form>
+        {% endif %}
+      </div>
+      {% endif %}
+
 
     <div class="stats-grid">
       <div class="stat-card">
@@ -160,10 +184,6 @@
         <div class="card">
           <div class="section-title" style="margin-bottom:1rem">Spending by category</div>
           <div id="cat-chart"></div>
-        </div>
-        <div class="card">
-          <div class="section-title" style="margin-bottom:1rem">Recent activity - to be implemented</div>
-          <div id="activity"></div>
         </div>
       </div>
     </div>
@@ -220,10 +240,12 @@
         <button class="modal-close" onclick="document.getElementById('modal-edit').classList.remove('open')">×</button>
       </div>
       <input type="hidden" id="edit-sub-id">
+
       <div class="form-group">
         <label class="form-label">Name <span class="required">*</span></label>
         <input type="text" id="edit-sub-name" class="form-input">
       </div>
+
       <div class="form-row cols-2">
         <div class="form-group">
           <label class="form-label">Category</label>
@@ -248,10 +270,14 @@
           <select id="edit-sub-freq" class="form-select">{{ freq_options() }}</select>
         </div>
       </div>
+
       <div class="modal-actions">
+        <button class="btn btn-secondary" style="color:var(--red)" onclick="deleteSubscription()">Delete</button>
         <button class="btn btn-secondary" onclick="document.getElementById('modal-edit').classList.remove('open')">Cancel</button>
         <button class="btn btn-primary" onclick="updateSubscription()">Save changes</button>
       </div>
+
+      
     </div>
   </div>
 
@@ -282,6 +308,7 @@
     const SUBS = {{ subscriptions | tojson }};
     const USER = {{ user | tojson }};
     const CATS = {{ categories | tojson }};
+    window.FAMILY = {{ family | tojson if family else 'null' }};
   </script>
   
 

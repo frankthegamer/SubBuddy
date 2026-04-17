@@ -123,6 +123,14 @@ let selectedUser = null;
         window.open(`/${selectedUser.USER_ID}/dashboard`, '_blank');
     }
 
+
+    function openEditFamily(fam_id, fam_name, fam_slimit) {
+      document.getElementById('edit-fam-id').value = fam_id;
+      document.getElementById('edit-fam-name').value = fam_name;
+      document.getElementById('edit-fam-slimit').value = fam_slimit || '';
+      document.getElementById('modal-edit-family').classList.add('open');
+    }
+
     document.addEventListener('click', e => {
       const menu = document.getElementById('profile-menu');
       const avatar = document.querySelector('.avatar');

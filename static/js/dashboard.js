@@ -224,18 +224,20 @@ function renderStats() {
   const monthlyTotal = active.reduce((sum, s) => sum + parseFloat(s.SUBPAY_Cost), 0);
 
   // annual estimate
-  const seen = new Set();
   const annualEstimate = SUBS
-    .filter(s => s.SUBPAY_Status === 'Active' && !seen.has(s.SUB_ID) && seen.add(s.SUB_ID))
-    .reduce((sum, s) => {
-      const cost = parseFloat(s.SUBPAY_Cost);
-      const freq = s.SUBVER_FREQ;
-      if (freq === 'Weekly') return sum + cost * 52;
-      if (freq === 'Monthly') return sum + cost * 12;
-      if (freq === 'Quarterly') return sum + cost * 4;
-      if (freq === 'Annually') return sum + cost;
-      return sum;
-    }, 0);
+  .filter(s => {
+    const year = new Date(s.SUBPAY_Date.replace(/-/g, '/')).getFullYear();
+    return year === selectedYear && s.SUBPAY_Status === 'Active';
+  })
+  .reduce((sum, s) => sum + parseFloat(s.SUBPAY_Cost), 0);
+
+  const familyCard = window.FAMILY ? `
+    <div class="stat-card">
+      <div class="stat-label">Family limit</div>
+      <div class="stat-value">${window.FAMILY.FAM_SLimit ? Math.round(monthlyTotal / window.FAMILY.FAM_SLimit * 100) + '%' : '—'}</div>
+      <div class="stat-sub">${window.FAMILY.FAM_SLimit ? '$' + monthlyTotal.toFixed(2) + ' of $' + window.FAMILY.FAM_SLimit.toFixed(2) : 'No limit set'}</div>
+    </div>
+  ` : '';
 
   document.querySelector('.stats-grid').innerHTML = `
     <div class="stat-card">
@@ -243,16 +245,21 @@ function renderStats() {
       <div class="stat-value">$${monthlyTotal.toFixed(2)}</div>
       <div class="stat-sub">across ${uniqueActive} active subscriptions</div>
     </div>
+
     <div class="stat-card">
       <div class="stat-label">Annual estimate</div>
       <div class="stat-value">$${annualEstimate.toFixed(2)}</div>
       <div class="stat-sub">projected this year</div>
     </div>
+
     <div class="stat-card">
       <div class="stat-label">Active</div>
       <div class="stat-value" style="color:var(--accent)">${uniqueActive}</div>
       <div class="stat-sub">${uniquePaused} paused</div>
     </div>
+
+    ${familyCard}
+    
   `;
 }
 
@@ -283,12 +290,6 @@ function renderCats() {
       `).join('');
 }
 
-// Placeholder for recent activity — will use SUBSCRIPTION_PAYMENTS data when wired up
-function renderActivity() {
-  document.getElementById('activity').innerHTML = `
-    <div style="color:var(--text-3);font-size:14px">No recent activity.</div>
-  `;
-}
 
 // Collects add subscription form data and submits to backend
 async function addSubscription() {
@@ -330,6 +331,20 @@ async function updatePayment() {
   }
 }
 
+async function deleteSubscription() {
+  if (!confirm('Delete this subscription and all its payment history?')) return;
+  const formData = new FormData();
+  formData.append('user_id', USER.USER_ID);
+  formData.append('sub_id', document.getElementById('edit-sub-id').value);
+
+  const res = await fetch('/delete-subscription', { method: 'POST', body: formData });
+  if (res.redirected) {
+    window.location.href = res.url;
+  } else {
+    alert('Failed to delete subscription');
+  }
+}
+
 // Close modals when clicking on the overlay background
 document.getElementById('modal-add').addEventListener('click', e => {
   if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
@@ -348,4 +363,3 @@ document.querySelector('.page-title').textContent = `Hello ${USER.USER_FName}`;
 
 // Initialize dashboard on page load
 updateMonthView();
-renderActivity();

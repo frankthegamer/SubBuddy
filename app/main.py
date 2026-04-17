@@ -155,10 +155,22 @@ def dashboard(request: Request, user_id: int):
         categories = cursor.fetchall()
         categories = json.loads(json.dumps(categories, default=serialize))
 
+        cursor.execute("""
+            SELECT F.FAM_Name, F.FAM_SLimit, F.FAM_ID
+            FROM FAMILY_USERS FU
+            JOIN FAMILIES F ON FU.FAM_ID = F.FAM_ID
+            WHERE FU.USER_ID = %s
+        """, (user_id,))
+        family = cursor.fetchone()
+        family = json.loads(json.dumps(family, default=serialize)) if family else None
+
+        cursor.execute("SELECT * FROM FAMILY_MANAGERS WHERE USER_ID = %s", (user_id,))
+        is_manager = cursor.fetchone() is not None
+
         return templates.TemplateResponse(
             request=request,
             name="dashboard.html",
-            context={"user": user, "subscriptions": subscriptions, "categories": categories}
+            context={"user": user, "subscriptions": subscriptions, "categories": categories, "family": family, "is_manager": is_manager }
         )
     finally:
         cursor.close()
@@ -198,6 +210,7 @@ def add_subscription(
     return RedirectResponse(url=f"/{user_id}/dashboard", status_code=303)
 
 
+
 # --- UPDATE SUBSCRIPTION (name, category, cost, freq) ---
 @app.post("/update-subscription")
 def update_subscription(
@@ -219,11 +232,37 @@ def update_subscription(
             "INSERT INTO SUBSCRIPTION_VERSIONS (SUB_ID, SUBVER_Cost, SUBVER_FREQ, SUBVER_EffectiveDate) VALUES (%s, %s, %s, CURDATE())",
             (sub_id, subver_cost, subver_freq)
         )
+
+        # Get original start date
+        cursor.execute("SELECT SUB_SDate FROM SUBSCRIPTIONS WHERE SUB_ID = %s", (sub_id,))
+        sub_sdate = cursor.fetchone()[0]
+
+        # Delete all non-cancelled payments and regenerate from original start date
         cursor.execute(
-            "DELETE FROM SUBSCRIPTION_PAYMENTS WHERE SUB_ID = %s AND SUBPAY_Date > CURDATE() AND SUBPAY_Status != 'Cancelled'",
+            "DELETE FROM SUBSCRIPTION_PAYMENTS WHERE SUB_ID = %s AND SUBPAY_Status != 'Cancelled'",
             (sub_id,)
         )
-        generate_payments(cursor, sub_id, date.today() + timedelta(days=1), subver_cost, subver_freq)
+        generate_payments(cursor, sub_id, sub_sdate, subver_cost, subver_freq)
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Error: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+    return RedirectResponse(url=f"/{user_id}/dashboard", status_code=303)
+
+
+# --- DELETE SUBSCRIPTION ---
+@app.post("/delete-subscription")
+def delete_subscription(user_id: int = Form(...), sub_id: int = Form(...)):
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    try:
+        # Delete child records first to avoid foreign key constraint errors
+        cursor.execute("DELETE FROM SUBSCRIPTION_PAYMENTS WHERE SUB_ID = %s", (sub_id,))
+        cursor.execute("DELETE FROM SUBSCRIPTION_VERSIONS WHERE SUB_ID = %s", (sub_id,))
+        cursor.execute("DELETE FROM SUBSCRIPTIONS WHERE SUB_ID = %s AND USER_ID = %s", (sub_id, user_id))
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -385,6 +424,8 @@ def family_page(request: Request, user_id: int):
         members = []
         family_subs = []
         monthly_total = 0
+        member_totals = {}
+
         if family:
             cursor.execute("""
                 SELECT U.USER_ID, U.USER_FName, U.USER_LName, U.USER_Email
@@ -416,20 +457,27 @@ def family_page(request: Request, user_id: int):
             family_subs = cursor.fetchall()
 
             seen_subs = set()
+            member_totals = {}
             for s in family_subs:
                 if s['SUB_ID'] not in seen_subs and s['SUBPAY_Status'] == 'Active':
                     seen_subs.add(s['SUB_ID'])
                     freq = s['SUBVER_FREQ']
                     cost = float(s['SUBPAY_Cost'])
+                    uid = s['USER_ID']
                     if freq == 'Weekly':
-                        monthly_total += cost * 52 / 12
+                        amount = cost * 52 / 12
                     elif freq == 'Monthly':
-                        monthly_total += cost
+                        amount = cost
                     elif freq == 'Quarterly':
-                        monthly_total += cost / 3
+                        amount = cost / 3
                     elif freq == 'Annually':
-                        monthly_total += cost / 12
-            monthly_total = round(monthly_total, 2)
+                        amount = cost / 12
+                    else:
+                        amount = 0
+                    monthly_total += amount
+                    member_totals[uid] = round(member_totals.get(uid, 0) + amount, 2)
+
+                    monthly_total = round(monthly_total, 2)
 
         family = json.loads(json.dumps(family, default=serialize)) if family else None
         members = json.loads(json.dumps(members, default=serialize))
@@ -442,7 +490,7 @@ def family_page(request: Request, user_id: int):
         return templates.TemplateResponse(
             request=request,
             name="family.html",
-            context={"user": user, "family": family, "members": members, "family_subs": family_subs, "monthly_total": monthly_total}
+            context={"user": user, "family": family, "members": members, "family_subs": family_subs, "monthly_total": monthly_total, "member_totals": member_totals}
         )
     finally:
         cursor.close()
@@ -455,12 +503,16 @@ def admin_page(request: Request, user_id: int):
     conn = get_db_conn()
     cursor = conn.cursor(dictionary=True)
     try:
-        if not is_admin(cursor, user_id):
-            return RedirectResponse(url=f"/{user_id}/dashboard", status_code=303)
-
         cursor.execute("SELECT * FROM USERS WHERE USER_ID = %s", (user_id,))
         user = cursor.fetchone()
         user = json.loads(json.dumps(user, default=serialize))
+
+        if not is_admin(cursor, user_id):
+            return templates.TemplateResponse(
+                request=request,
+                name="admin.html",
+                context={"user": user, "is_admin": False, "families": []}
+            )
 
         cursor.execute("""
             SELECT F.FAM_ID, F.FAM_Name, F.FAM_SLimit,
@@ -475,7 +527,7 @@ def admin_page(request: Request, user_id: int):
         return templates.TemplateResponse(
             request=request,
             name="admin.html",
-            context={"user": user, "families": families}
+            context={"user": user, "is_admin": True, "families": families}
         )
     finally:
         cursor.close()
@@ -536,8 +588,13 @@ def admin_create_family(
             return {"error": "This user already manages a family"}
 
         cursor.execute(
-            "INSERT INTO FAMILIES (FAM_Name, FAMMAN_ID, FAM_SLimit) VALUES (%s, %s, %s)",
-            (fam_name, famman_id, fam_slimit)
+        "INSERT INTO FAMILIES (FAM_Name, FAMMAN_ID, FAM_SLimit) VALUES (%s, %s, %s)",
+        (fam_name, famman_id, fam_slimit)
+        )
+        fam_id = cursor.lastrowid
+        cursor.execute(
+            "INSERT INTO FAMILY_USERS (FAM_ID, USER_ID) VALUES (%s, %s)",
+            (fam_id, manager_user_id)
         )
         conn.commit()
     except Exception as e:
@@ -547,6 +604,7 @@ def admin_create_family(
         cursor.close()
         conn.close()
     return RedirectResponse(url=f"/{user_id}/admin", status_code=303)
+
 
 
 # --- ADMIN: REASSIGN FAMILY MANAGER ---
@@ -569,15 +627,13 @@ def reassign_family_manager(
 
         manager_user_id = user['USER_ID']
 
-
-        # Check if this user is an admin
+        # Check if this user is an admin — admins cannot be family managers
         cursor.execute("SELECT * FROM SYSTEM_ADMINS WHERE USER_ID = %s", (manager_user_id,))
         if cursor.fetchone():
             return {"error": "This user is a System Admin and cannot be a Family Manager"}
 
+        # Get or create a FAMILY_MANAGERS record for the new manager
         cursor.execute("SELECT FAMMAN_ID FROM FAMILY_MANAGERS WHERE USER_ID = %s", (manager_user_id,))
-
-        
         manager = cursor.fetchone()
         if not manager:
             cursor.execute("INSERT INTO FAMILY_MANAGERS (USER_ID) VALUES (%s)", (manager_user_id,))
@@ -585,11 +641,21 @@ def reassign_family_manager(
         else:
             famman_id = manager['FAMMAN_ID']
 
+        # Make sure the new manager doesn't already manage a different family
         cursor.execute("SELECT FAM_ID FROM FAMILIES WHERE FAMMAN_ID = %s AND FAM_ID != %s", (famman_id, fam_id))
         if cursor.fetchone():
             return {"error": "This user already manages another family"}
 
+        # Reassign the family to the new manager
         cursor.execute("UPDATE FAMILIES SET FAMMAN_ID = %s WHERE FAM_ID = %s", (famman_id, fam_id))
+
+        # Clean up orphaned FAMILY_MANAGERS records — remove any manager no longer managing a family
+        cursor.execute("""
+            DELETE FROM FAMILY_MANAGERS
+            WHERE USER_ID != %s
+            AND FAMMAN_ID NOT IN (SELECT FAMMAN_ID FROM FAMILIES)
+        """, (manager_user_id,))
+
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -612,6 +678,13 @@ def dissolve_family(fam_id: int = Form(...), user_id: int = Form(...)):
 
         cursor.execute("DELETE FROM FAMILY_USERS WHERE FAM_ID = %s", (fam_id,))
         cursor.execute("DELETE FROM FAMILIES WHERE FAM_ID = %s", (fam_id,))
+
+        # Clean up the orphaned FAMILY_MANAGERS record
+        cursor.execute("""
+            DELETE FROM FAMILY_MANAGERS
+            WHERE FAMMAN_ID NOT IN (SELECT FAMMAN_ID FROM FAMILIES)
+        """)
+
         conn.commit()
         return {"status": "ok"}
     except Exception as e:
@@ -674,6 +747,7 @@ def admin_delete_user(user_id: int = Form(...), target_user_id: int = Form(...))
         conn.close()
 
 
+
 # --- ADMIN: DELETE SUBSCRIPTION ---
 @app.post("/admin/delete-subscription")
 def admin_delete_subscription(sub_id: int = Form(...), user_id: int = Form(...)):
@@ -693,6 +767,34 @@ def admin_delete_subscription(sub_id: int = Form(...), user_id: int = Form(...))
     finally:
         cursor.close()
         conn.close()
+
+
+# --- ADMIN: UPDATE FAMILY ---
+@app.post("/admin/update-family")
+def admin_update_family(
+    user_id: int = Form(...),
+    fam_id: int = Form(...),
+    fam_name: str = Form(...),
+    fam_slimit: float = Form(None)
+):
+    conn = get_db_conn()
+    cursor = conn.cursor(dictionary=True)
+    try:
+        if not is_admin(cursor, user_id):
+            return {"error": "Unauthorized"}
+
+        cursor.execute(
+            "UPDATE FAMILIES SET FAM_Name = %s, FAM_SLimit = %s WHERE FAM_ID = %s",
+            (fam_name, fam_slimit, fam_id)
+        )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Error: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+    return RedirectResponse(url=f"/{user_id}/admin", status_code=303)
 
 
 # --- FAMILY: ADD MEMBER ---
@@ -726,6 +828,47 @@ def add_user(fam_id: int = Form(...), user_email: str = Form(...)):
         """, (fam_id,))
         manager = cursor.fetchone()
         manager_id = manager['USER_ID']
+    except Exception as e:
+        conn.rollback()
+        print(f"Error: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+    return RedirectResponse(url=f"/{manager_id}/family", status_code=303)
+
+
+
+# --- FAMILY: Leave Family ---
+@app.post("/leave-family")
+def leave_family(user_id: int = Form(...), fam_id: int = Form(...), next: str = Form(None)):
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "DELETE FROM FAMILY_USERS WHERE USER_ID = %s AND FAM_ID = %s",
+            (user_id, fam_id)
+        )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Error: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+    return RedirectResponse(url= next or f"/{user_id}/dashboard", status_code=303)
+
+
+# --- FAMILY: SET SPENDING LIMIT ---
+@app.post("/assign-spend-limit")
+def assign_spend_limit(fam_id: int = Form(...), manager_id: int = Form(...), fam_slimit: float = Form(...)):
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE FAMILIES SET FAM_SLimit = %s WHERE FAM_ID = %s",
+            (fam_slimit, fam_id)
+        )
+        conn.commit()
     except Exception as e:
         conn.rollback()
         print(f"Error: {e}")

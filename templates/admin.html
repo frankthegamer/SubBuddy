@@ -49,11 +49,20 @@
     </div>
   </nav>
 
+
+  {% if not is_admin %}
+    <div style="text-align:center;padding:4rem 2rem;color:var(--text-3);font-size:15px">
+      <div style="font-size:2rem;margin-bottom:1rem">🔒</div>
+      <div style="font-size:16px;font-weight:500;margin-bottom:0.5rem">Access Denied</div>
+      <div>You don't have admin privileges.</div>
+    </div>
+  {% else %}
+
   <main class="container">
     <div class="page-header">
       <div>
         <div class="page-title">Admin Panel</div>
-        <div class="page-subtitle">Manage users, subscriptions, and families</div>
+        <div class="page-subtitle">Search for users and manage families</div>
       </div>
     </div>
 
@@ -106,7 +115,7 @@
 
       {% if families %}
         {% for f in families %}
-          <div class="card" style="margin-bottom:1rem">
+          <div class="card" style="margin-bottom:1rem;cursor:pointer" onclick='openEditFamily({{ f.FAM_ID }}, {{ f.FAM_Name | tojson }}, {{ f.FAM_SLimit or "null" }})'>
             <div style="display:flex;align-items:center;justify-content:space-between">
               <div>
                 <div style="font-weight:500;font-size:15px">{{ f.FAM_Name }}</div>
@@ -115,7 +124,8 @@
                   {% if f.FAM_SLimit %} · Limit: ${{ "%.2f"|format(f.FAM_SLimit) }}{% endif %}
                 </div>
               </div>
-              <div style="display:flex;gap:8px">
+
+              <div style="display:flex;gap:8px" onclick="event.stopPropagation()">
                 <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px"
                   onclick="openReassignModal({{ f.FAM_ID }})">Reassign manager</button>
                 <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px;color:var(--red)"
@@ -231,6 +241,48 @@
     </div>
   </div>
 
+
+  <!-- Edit family modal -->
+<div class="modal-overlay" id="modal-edit-family">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <div class="modal-title">Edit family</div>
+      <button class="modal-close" onclick="document.getElementById('modal-edit-family').classList.remove('open')">×</button>
+    </div>
+    
+    <form method="post" action="/admin/update-family">
+      <input type="hidden" name="user_id" value="{{ user.USER_ID }}">
+      <input type="hidden" name="fam_id" id="edit-fam-id">
+      <div class="form-group">
+        <label class="form-label">Family name <span class="required">*</span></label>
+        <input type="text" name="fam_name" id="edit-fam-name" class="form-input" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Monthly spend limit (optional)</label>
+        <div class="input-prefix-wrap">
+          <span class="input-prefix">$</span>
+          <input type="number" name="fam_slimit" id="edit-fam-slimit" class="form-input" placeholder="0.00" step="0.01">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('modal-edit-family').classList.remove('open')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+    
+    
+
+
+
+
+
+
+
+
   <script src="/static/js/admin.js"></script>
+
+  {% endif %}
 </body>
 </html>
