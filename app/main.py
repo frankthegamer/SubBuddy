@@ -735,6 +735,27 @@ def admin_delete_user(user_id: int = Form(...), target_user_id: int = Form(...))
         if not is_admin(cursor, user_id):
             return {"error": "Unauthorized"}
 
+        # Dissolve family if target is a manager
+        cursor.execute("SELECT FAMMAN_ID FROM FAMILY_MANAGERS WHERE USER_ID = %s", (target_user_id,))
+        manager_row = cursor.fetchone()
+        if manager_row:
+            famman_id = manager_row["FAMMAN_ID"]
+            cursor.execute("SELECT FAM_ID FROM FAMILIES WHERE FAMMAN_ID = %s", (famman_id,))
+            family_row = cursor.fetchone()
+            if family_row:
+                fam_id = family_row["FAM_ID"]
+                cursor.execute("DELETE FROM FAMILY_USERS WHERE FAM_ID = %s", (fam_id,))
+                cursor.execute("DELETE FROM FAMILIES WHERE FAM_ID = %s", (fam_id,))
+        cursor.execute("DELETE FROM FAMILY_MANAGERS WHERE USER_ID = %s", (target_user_id,))
+
+        # Delete user's data in dependency order
+        cursor.execute("DELETE FROM SUBSCRIPTION_PAYMENTS WHERE SUB_ID IN (SELECT SUB_ID FROM SUBSCRIPTIONS WHERE USER_ID = %s)", (target_user_id,))
+        cursor.execute("DELETE FROM SUBSCRIPTION_VERSIONS WHERE SUB_ID IN (SELECT SUB_ID FROM SUBSCRIPTIONS WHERE USER_ID = %s)", (target_user_id,))
+        cursor.execute("DELETE FROM SUBSCRIPTIONS WHERE USER_ID = %s", (target_user_id,))
+        cursor.execute("DELETE FROM CATEGORIES WHERE USER_ID = %s", (target_user_id,))
+        cursor.execute("DELETE FROM FAMILY_USERS WHERE USER_ID = %s", (target_user_id,))
+        cursor.execute("DELETE FROM FAMILY_MANAGERS WHERE USER_ID = %s", (target_user_id,))
+        cursor.execute("DELETE FROM SYSTEM_ADMINS WHERE USER_ID = %s", (target_user_id,))
         cursor.execute("DELETE FROM USERS WHERE USER_ID = %s", (target_user_id,))
         conn.commit()
         return {"status": "ok"}

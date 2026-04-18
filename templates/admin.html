@@ -79,30 +79,6 @@
         <button class="btn btn-primary" onclick="searchUsers()">Search</button>
       </div>
       <div id="search-results"></div>
-
-      <!-- Selected user detail -->
-      <div id="user-detail" style="display:none;margin-top:1.5rem">
-        <div class="card" style="margin-bottom:1rem">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-            <div class="section-title" id="detail-name"></div>
-
-            <!-- AFTER -->
-            <div style="display:flex;gap:8px">
-                <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px"
-                    onclick="viewSubscriptions()">Visit dashboard</button>
-                <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px"
-                    onclick="document.getElementById('modal-edit-user').classList.add('open')">Edit account</button>
-                <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px;color:var(--red)"
-                    onclick="deleteUser()">Delete account</button>
-            </div>
-
-          </div>
-          <div style="font-size:13px;color:var(--text-3)" id="detail-email"></div>
-        </div>
-
-        
-    
-      </div>
     </div>
 
     <!-- FAMILIES TAB -->
