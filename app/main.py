@@ -167,6 +167,9 @@ def dashboard(request: Request, user_id: int):
         cursor.execute("SELECT * FROM FAMILY_MANAGERS WHERE USER_ID = %s", (user_id,))
         is_manager = cursor.fetchone() is not None
 
+        print("FAMILY:", family)
+        print("IS_MANAGER:", is_manager)
+
         return templates.TemplateResponse(
             request=request,
             name="dashboard.html",
@@ -422,7 +425,7 @@ def family_page(request: Request, user_id: int):
         family = cursor.fetchone()
 
         members = []
-        family_subs = []
+       
         monthly_total = 0
         member_totals = {}
 
@@ -454,11 +457,12 @@ def family_page(request: Request, user_id: int):
                 )
                 ORDER BY U.USER_LName, SP.SUBPAY_Date
             """, (user_id, family['FAM_ID'],))
-            family_subs = cursor.fetchall()
+            
+            _subs = cursor.fetchall()
 
             seen_subs = set()
             member_totals = {}
-            for s in family_subs:
+            for s in _subs:
                 if s['SUB_ID'] not in seen_subs and s['SUBPAY_Status'] == 'Active':
                     seen_subs.add(s['SUB_ID'])
                     freq = s['SUBVER_FREQ']
@@ -481,7 +485,6 @@ def family_page(request: Request, user_id: int):
 
         family = json.loads(json.dumps(family, default=serialize)) if family else None
         members = json.loads(json.dumps(members, default=serialize))
-        family_subs = json.loads(json.dumps(family_subs, default=serialize))
 
         cursor.execute("SELECT * FROM USERS WHERE USER_ID = %s", (user_id,))
         user = cursor.fetchone()
@@ -490,7 +493,7 @@ def family_page(request: Request, user_id: int):
         return templates.TemplateResponse(
             request=request,
             name="family.html",
-            context={"user": user, "family": family, "members": members, "family_subs": family_subs, "monthly_total": monthly_total, "member_totals": member_totals}
+            context={"user": user, "family": family, "members": members, "monthly_total": monthly_total, "member_totals": member_totals}
         )
     finally:
         cursor.close()
@@ -652,9 +655,8 @@ def reassign_family_manager(
         # Clean up orphaned FAMILY_MANAGERS records — remove any manager no longer managing a family
         cursor.execute("""
             DELETE FROM FAMILY_MANAGERS
-            WHERE USER_ID != %s
-            AND FAMMAN_ID NOT IN (SELECT FAMMAN_ID FROM FAMILIES)
-        """, (manager_user_id,))
+            WHERE FAMMAN_ID NOT IN (SELECT FAMMAN_ID FROM FAMILIES)
+        """)
 
         conn.commit()
     except Exception as e:
@@ -767,27 +769,6 @@ def admin_delete_user(user_id: int = Form(...), target_user_id: int = Form(...))
         cursor.close()
         conn.close()
 
-
-
-# --- ADMIN: DELETE SUBSCRIPTION ---
-@app.post("/admin/delete-subscription")
-def admin_delete_subscription(sub_id: int = Form(...), user_id: int = Form(...)):
-    conn = get_db_conn()
-    cursor = conn.cursor(dictionary=True)
-    try:
-        if not is_admin(cursor, user_id):
-            return {"error": "Unauthorized"}
-
-        cursor.execute("DELETE FROM SUBSCRIPTIONS WHERE SUB_ID = %s", (sub_id,))
-        conn.commit()
-        return {"status": "ok"}
-    except Exception as e:
-        conn.rollback()
-        print(f"Error: {e}")
-        return {"status": "error"}
-    finally:
-        cursor.close()
-        conn.close()
 
 
 # --- ADMIN: UPDATE FAMILY ---

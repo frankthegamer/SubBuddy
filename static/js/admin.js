@@ -7,7 +7,7 @@ let selectedUser = null;
       document.getElementById(panelId).classList.add('active');
     }
 
-    async function searchUsers() {
+  async function searchUsers() {
   const q = document.getElementById('search-input').value.trim();
   if (!q) return;
   const res = await fetch(`/admin/search?q=${encodeURIComponent(q)}`);
@@ -34,64 +34,7 @@ let selectedUser = null;
     : '<div style="color:var(--text-3);font-size:14px">No users found.</div>';
   }
 
-    async function selectUser(user) {
-      selectedUser = user;
 
-      // Fill edit modal fields
-      document.getElementById('edit-user-id').value = user.USER_ID;
-      document.getElementById('edit-user-fname').value = user.USER_FName;
-      document.getElementById('edit-user-lname').value = user.USER_LName;
-      document.getElementById('edit-user-email').value = user.USER_Email;
-      document.getElementById('edit-user-phone').value = user.USER_Phone || '';
-
-      document.getElementById('detail-name').textContent = `${user.USER_FName} ${user.USER_LName}`;
-      document.getElementById('detail-email').textContent = user.USER_Email;
-
-      document.getElementById('user-detail').style.display = 'block';
-    }
-
-    function renderUserSubs(subs, userId) {
-      const el = document.getElementById('user-subs');
-      if (!subs.length) {
-        el.innerHTML = '<div style="color:var(--text-3);font-size:14px">No subscriptions.</div>';
-        return;
-      }
-      // Group by SUB_ID to show one row per subscription (latest payment)
-      const seen = new Set();
-      const unique = subs.filter(s => {
-        if (seen.has(s.SUB_ID)) return false;
-        seen.add(s.SUB_ID); return true;
-      });
-      el.innerHTML = `<div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">` +
-        unique.map(s => `
-          <div class="sub-row">
-            <span style="flex:1;font-weight:500">${s.SUB_Name}</span>
-            <span style="color:var(--text-3)">${s.SUB_CAT || 'Uncategorized'}</span>
-            <span style="font-family:'DM Mono',monospace">$${parseFloat(s.SUBPAY_Cost).toFixed(2)}</span>
-            <button class="btn btn-secondary" style="padding:2px 8px;font-size:12px"
-              onclick="openEditSub(${JSON.stringify(s).replace(/"/g, '&quot;')}, ${userId})">✏️</button>
-            <button class="btn btn-secondary" style="padding:2px 8px;font-size:12px;color:var(--red)"
-              onclick="deleteSub(${s.SUB_ID})">🗑️</button>
-          </div>`).join('') + `</div>`;
-    }
-
-    function openEditSub(s, userId) {
-      document.getElementById('edit-sub-user-id').value = userId;
-      document.getElementById('edit-sub-id').value = s.SUB_ID;
-      document.getElementById('edit-sub-name').value = s.SUB_Name;
-      document.getElementById('edit-sub-cat').value = s.SUB_CAT || '';
-      document.getElementById('edit-sub-cost').value = s.SUBPAY_Cost;
-      document.getElementById('edit-sub-freq').value = s.SUBVER_FREQ;
-      document.getElementById('modal-edit-sub').classList.add('open');
-    }
-
-    async function deleteSub(sub_id) {
-      if (!confirm('Delete this subscription and all its payment history?')) return;
-      const fd = new FormData();
-      fd.append('sub_id', sub_id);
-      await fetch('/admin/delete-subscription', { method: 'POST', body: fd });
-      if (selectedUser) selectUser(selectedUser); // refresh
-    }
 
     async function deleteUser() {
       if (!selectedUser) return;
@@ -119,16 +62,6 @@ let selectedUser = null;
         fd.append('user_id', userId);
         const res = await fetch('/admin/dissolve-family', { method: 'POST', body: fd });
         window.location.href = `/${userId}/admin`;
-    }
-
-    function toggleProfileMenu() {
-      const menu = document.getElementById('profile-menu');
-      menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
-    }
-
-    function viewSubscriptions() {
-        if (!selectedUser) return;
-        window.open(`/${selectedUser.USER_ID}/dashboard`, '_blank');
     }
 
 
