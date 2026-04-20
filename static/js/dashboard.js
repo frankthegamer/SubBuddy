@@ -124,7 +124,7 @@ function updateMonthView() {
 }
 
 // Renders the subscription payment list for the selected month
-// Clicking a card opens the payment edit modal; ✏️ opens subscription edit; ⏸️/▶️ pause/resume; 🗑️ cancels
+// Clicking a card opens the payment edit modal; $ opens edit individual payment; ⏸️/▶️ pause/resume; X cancels
 function renderList() {
   const filtered = getFilteredSubs();
   const list = filtered.filter(s => activeFilter === 'All' || s.SUBPAY_Status === activeFilter);
