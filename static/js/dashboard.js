@@ -141,7 +141,10 @@ function renderList() {
         <div class="sub-freq">${s.SUBPAY_Date}</div>
       </div>
       <div style="display:flex;gap:4px;margin-left:8px" onclick="event.stopPropagation()">
-        <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px" onclick="openPaymentModal(${s.SUBPAY_ID}, ${s.SUBPAY_Cost})">$</button>
+
+        ${s.SUBPAY_Status !== 'Cancelled' ? `
+            <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px" onclick="openPaymentModal(${s.SUBPAY_ID}, ${s.SUBPAY_Cost})">$</button>
+          ` : ''}
         ${s.SUBPAY_Status === 'Active' ? `
           <button class="btn btn-secondary" style="padding:4px 8px;font-size:12px" onclick="pauseSubscription(${s.SUB_ID}, '${s.SUBPAY_Date}')">⏸️</button>
         ` : s.SUBPAY_Status === 'Paused' ? `
