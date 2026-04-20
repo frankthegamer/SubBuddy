@@ -351,25 +351,6 @@ def add_category(
     return {"status": "ok"}
 
 
-# --- DELETE CUSTOM CATEGORY ---
-@app.post("/delete-category")
-def delete_category(cat_id: int = Form(...), user_id: int = Form(...)):
-    conn = get_db_conn()
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            "DELETE FROM CATEGORIES WHERE CAT_ID = %s AND USER_ID = %s",
-            (cat_id, user_id)
-        )
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        print(f"Error: {e}")
-    finally:
-        cursor.close()
-        conn.close()
-    return RedirectResponse(url=f"/{user_id}/dashboard", status_code=303)
-
 
 # --- PAUSE SUBSCRIPTION ---
 @app.post("/pause-subscription")

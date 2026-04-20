@@ -78,20 +78,6 @@ async function saveCustomCategory(selectId, inputId, rowId) {
   document.getElementById(inputId).value = '';
 }
 
-// Deletes a custom category from the DB and reloads the page
-async function deleteCategory(cat_id) {
-  if (!confirm('Delete this custom category?')) return;
-  const formData = new FormData();
-  formData.append('cat_id', cat_id);
-  formData.append('user_id', USER.USER_ID);
-
-  const res = await fetch('/delete-category', { method: 'POST', body: formData });
-  if (res.redirected) {
-    window.location.href = res.url;
-  } else {
-    alert('Failed to delete category');
-  }
-}
 
 // Pauses all payments from pause_date onwards for a subscription
 async function pauseSubscription(sub_id, subpay_date) {
