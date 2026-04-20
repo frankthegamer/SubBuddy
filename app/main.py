@@ -25,12 +25,9 @@ templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 db_pool = pooling.MySQLConnectionPool(
-    pool_name="subbuddy_pool",
-    pool_size=10,
-    host=os.getenv("DB_HOST"),
-    user=os.getenv("DB_USER"),
-    password=os.getenv("DB_PASS"),
-    database=os.getenv("DB_NAME")
+    pool_name="subbuddy_pool", pool_size=10,
+    host=os.getenv("DB_HOST"), user=os.getenv("DB_USER"),
+    password=os.getenv("DB_PASS"), database=os.getenv("DB_NAME")
 )
 
 def get_db_conn():
@@ -40,7 +37,10 @@ def is_admin(cursor, user_id: int) -> bool:
     cursor.execute("SELECT * FROM SYSTEM_ADMINS WHERE USER_ID = %s", (user_id,))
     return cursor.fetchone() is not None
 
-# Generates 12 months of payment records from start_date
+
+
+
+# Helper method that generates 12 months of payment records from start_date
 def generate_payments(cursor, sub_id, start_date, cost, freq):
     if isinstance(start_date, str):
         start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
@@ -67,12 +67,15 @@ def generate_payments(cursor, sub_id, start_date, cost, freq):
         payments
     )
 
+# ==================== LOGIN / REGISTER ===================== #
 
-# --- LOGIN ---
+# --- GET LOGIN PAGE---
 @app.get("/")
 def login_page(request: Request):
     return templates.TemplateResponse(request=request, name="login.html", context={})
 
+
+# --- POST LOGIN ---
 @app.post("/")
 def login(
     user_email: str = Form(...),
@@ -95,7 +98,7 @@ def login(
         conn.close()
 
 
-# --- REGISTER ---
+# --- POST REGISTER ---
 @app.post("/register")
 def register(
     user_fname: str = Form(...),
@@ -121,7 +124,10 @@ def register(
     return RedirectResponse(url="/", status_code=303)
 
 
-# --- DASHBOARD ---
+
+# ==================== DASHBOARD ===================== #
+
+# ---GET DASHBOARD ---
 @app.get("/{user_id}/dashboard")
 def dashboard(request: Request, user_id: int):
     conn = get_db_conn()
@@ -179,6 +185,8 @@ def dashboard(request: Request, user_id: int):
         cursor.close()
         conn.close()
 
+
+# ==================== SUBSCRIPTIONS ===================== #
 
 # --- ADD SUBSCRIPTION ---
 @app.post("/add-subscription")
@@ -276,7 +284,7 @@ def delete_subscription(user_id: int = Form(...), sub_id: int = Form(...)):
     return RedirectResponse(url=f"/{user_id}/dashboard", status_code=303)
 
 
-# --- UPDATE SINGLE PAYMENT ---
+# --- UPDATE PAYMENT ---
 @app.post("/update-payment")
 def update_payment(
     user_id: int = Form(...),
@@ -328,29 +336,6 @@ def cancel_subscription(
     return RedirectResponse(url=f"/{user_id}/dashboard", status_code=303)
 
 
-# --- ADD CUSTOM CATEGORY ---
-@app.post("/add-category")
-def add_category(
-    cat_name: str = Form(...),
-    user_id: int = Form(...)
-):
-    conn = get_db_conn()
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            "INSERT INTO CATEGORIES (CAT_Name, USER_ID) VALUES (%s, %s)",
-            (cat_name, user_id)
-        )
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        print(f"Error: {e}")
-    finally:
-        cursor.close()
-        conn.close()
-    return {"status": "ok"}
-
-
 
 # --- PAUSE SUBSCRIPTION ---
 @app.post("/pause-subscription")
@@ -391,6 +376,33 @@ def resume_subscription(sub_id: int = Form(...), user_id: int = Form(...), resum
         conn.close()
     return RedirectResponse(url=f"/{user_id}/dashboard", status_code=303)
 
+
+# --- ADD CUSTOM CATEGORY ---
+@app.post("/add-category")
+def add_category(
+    cat_name: str = Form(...),
+    user_id: int = Form(...)
+):
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO CATEGORIES (CAT_Name, USER_ID) VALUES (%s, %s)",
+            (cat_name, user_id)
+        )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Error: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+    return {"status": "ok"}
+
+
+
+
+# ==================== FAMILY ===================== #
 
 # --- FAMILY PAGE ---
 @app.get("/{user_id}/family")
@@ -480,6 +492,90 @@ def family_page(request: Request, user_id: int):
         cursor.close()
         conn.close()
 
+# --- FAMILY: ADD MEMBER ---
+@app.post("/add-user")
+def add_user(fam_id: int = Form(...), user_email: str = Form(...)):
+    conn = get_db_conn()
+    cursor = conn.cursor(dictionary=True)
+    manager_id = None
+    try:
+        cursor.execute("SELECT USER_ID FROM USERS WHERE USER_Email = %s", (user_email,))
+        user = cursor.fetchone()
+        if not user:
+            return {"error": "No user found with that email"}
+
+        user_id = user['USER_ID']
+
+        cursor.execute("SELECT * FROM FAMILY_USERS WHERE USER_ID = %s", (user_id,))
+        if cursor.fetchone():
+            return {"error": "User is already in a family"}
+
+        cursor.execute(
+            "INSERT INTO FAMILY_USERS (FAM_ID, USER_ID) VALUES (%s, %s)",
+            (fam_id, user_id)
+        )
+        conn.commit()
+
+        cursor.execute("""
+            SELECT FM.USER_ID FROM FAMILIES F
+            JOIN FAMILY_MANAGERS FM ON F.FAMMAN_ID = FM.FAMMAN_ID
+            WHERE F.FAM_ID = %s
+        """, (fam_id,))
+        manager = cursor.fetchone()
+        manager_id = manager['USER_ID']
+    except Exception as e:
+        conn.rollback()
+        print(f"Error: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+    return RedirectResponse(url=f"/{manager_id}/family", status_code=303)
+
+
+
+# --- FAMILY: Leave Family ---
+@app.post("/leave-family")
+def leave_family(user_id: int = Form(...), fam_id: int = Form(...), next: str = Form(None)):
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "DELETE FROM FAMILY_USERS WHERE USER_ID = %s AND FAM_ID = %s",
+            (user_id, fam_id)
+        )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Error: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+    return RedirectResponse(url= next or f"/{user_id}/dashboard", status_code=303)
+
+
+# --- FAMILY: SET SPENDING LIMIT ---
+@app.post("/assign-spend-limit")
+def assign_spend_limit(fam_id: int = Form(...), manager_id: int = Form(...), fam_slimit: float = Form(...)):
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "UPDATE FAMILIES SET FAM_SLimit = %s WHERE FAM_ID = %s",
+            (fam_slimit, fam_id)
+        )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Error: {e}")
+    finally:
+        cursor.close()
+        conn.close()
+    return RedirectResponse(url=f"/{manager_id}/family", status_code=303)
+
+
+
+
+# ==================== SYSTEM ADMIN ===================== #
 
 # --- ADMIN PAGE ---
 @app.get("/{user_id}/admin")
@@ -780,82 +876,3 @@ def admin_update_family(
     return RedirectResponse(url=f"/{user_id}/admin", status_code=303)
 
 
-# --- FAMILY: ADD MEMBER ---
-@app.post("/add-user")
-def add_user(fam_id: int = Form(...), user_email: str = Form(...)):
-    conn = get_db_conn()
-    cursor = conn.cursor(dictionary=True)
-    manager_id = None
-    try:
-        cursor.execute("SELECT USER_ID FROM USERS WHERE USER_Email = %s", (user_email,))
-        user = cursor.fetchone()
-        if not user:
-            return {"error": "No user found with that email"}
-
-        user_id = user['USER_ID']
-
-        cursor.execute("SELECT * FROM FAMILY_USERS WHERE USER_ID = %s", (user_id,))
-        if cursor.fetchone():
-            return {"error": "User is already in a family"}
-
-        cursor.execute(
-            "INSERT INTO FAMILY_USERS (FAM_ID, USER_ID) VALUES (%s, %s)",
-            (fam_id, user_id)
-        )
-        conn.commit()
-
-        cursor.execute("""
-            SELECT FM.USER_ID FROM FAMILIES F
-            JOIN FAMILY_MANAGERS FM ON F.FAMMAN_ID = FM.FAMMAN_ID
-            WHERE F.FAM_ID = %s
-        """, (fam_id,))
-        manager = cursor.fetchone()
-        manager_id = manager['USER_ID']
-    except Exception as e:
-        conn.rollback()
-        print(f"Error: {e}")
-    finally:
-        cursor.close()
-        conn.close()
-    return RedirectResponse(url=f"/{manager_id}/family", status_code=303)
-
-
-
-# --- FAMILY: Leave Family ---
-@app.post("/leave-family")
-def leave_family(user_id: int = Form(...), fam_id: int = Form(...), next: str = Form(None)):
-    conn = get_db_conn()
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            "DELETE FROM FAMILY_USERS WHERE USER_ID = %s AND FAM_ID = %s",
-            (user_id, fam_id)
-        )
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        print(f"Error: {e}")
-    finally:
-        cursor.close()
-        conn.close()
-    return RedirectResponse(url= next or f"/{user_id}/dashboard", status_code=303)
-
-
-# --- FAMILY: SET SPENDING LIMIT ---
-@app.post("/assign-spend-limit")
-def assign_spend_limit(fam_id: int = Form(...), manager_id: int = Form(...), fam_slimit: float = Form(...)):
-    conn = get_db_conn()
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            "UPDATE FAMILIES SET FAM_SLimit = %s WHERE FAM_ID = %s",
-            (fam_slimit, fam_id)
-        )
-        conn.commit()
-    except Exception as e:
-        conn.rollback()
-        print(f"Error: {e}")
-    finally:
-        cursor.close()
-        conn.close()
-    return RedirectResponse(url=f"/{manager_id}/family", status_code=303)
