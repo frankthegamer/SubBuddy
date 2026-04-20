@@ -9,7 +9,12 @@ let selectedUser = null;
 
   function selectUser(u) {
     selectedUser = u;
-  }
+    document.getElementById('edit-user-id').value    = u.USER_ID;
+    document.getElementById('edit-user-fname').value = u.USER_FName;
+    document.getElementById('edit-user-lname').value = u.USER_LName;
+    document.getElementById('edit-user-email').value = u.USER_Email;
+    document.getElementById('edit-user-phone').value = u.USER_Phone || '';
+}
 
   async function searchUsers() {
     const q = document.getElementById('search-input').value.trim();
