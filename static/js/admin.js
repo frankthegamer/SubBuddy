@@ -7,12 +7,16 @@ let selectedUser = null;
       document.getElementById(panelId).classList.add('active');
     }
 
+  function selectUser(u) {
+    selectedUser = u;
+  }
+
   async function searchUsers() {
-  const q = document.getElementById('search-input').value.trim();
-  if (!q) return;
-  const res = await fetch(`/admin/search?q=${encodeURIComponent(q)}`);
-  const data = await res.json();
-  const results = data.users;
+    const q = document.getElementById('search-input').value.trim();
+    if (!q) return;
+    const res = await fetch(`/admin/search?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    const results = data.users;
 
   document.getElementById('search-results').innerHTML = results.length
     ? results.map(u => `
