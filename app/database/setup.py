@@ -5,9 +5,10 @@ Uses Environment Variables via python-dotenv for security.
 """
 import mysql.connector
 import os
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv())
 
-load_dotenv()
+
 
 def init_db():
     """Establishes initial connection to create DB and Tables."""
